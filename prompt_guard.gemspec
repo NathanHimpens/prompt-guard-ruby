@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.summary = "Prompt injection detection for Ruby"
   spec.description = "Detect prompt injection attacks using ONNX models. " \
                      "Protects LLM applications from malicious prompts."
-  spec.homepage = "https://github.com/your-username/prompt_guard"
+  spec.homepage = "https://github.com/NathanHimpens/prompt-guard-ruby"
   spec.license = "MIT"
 
   spec.author = "Klara"
@@ -19,8 +19,8 @@ Gem::Specification.new do |spec|
 
   spec.required_ruby_version = ">= 3.0"
 
-  spec.add_dependency "onnxruntime", ">= 0.9"
-  spec.add_dependency "tokenizers", ">= 0.5"
+  spec.add_dependency "onnxruntime", "~> 0.9"
+  spec.add_dependency "tokenizers", "~> 0.5"
 
   spec.metadata = {
     "homepage_uri" => spec.homepage,
