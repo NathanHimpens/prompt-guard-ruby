@@ -61,7 +61,7 @@ Gem::Specification.new do |spec|
     Option 2 — Export and use a local model:
       pip install optimum[onnxruntime] transformers torch
       optimum-cli export onnx \\
-        --model deepset/deberta-v3-base-injection \\
+        --model protectai/deberta-v3-base-injection-onnx \\
         --task text-classification ./prompt-guard-model
 
       require 'prompt_guard'

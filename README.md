@@ -22,14 +22,16 @@ gem install prompt_guard
 
 ## ONNX Model Setup
 
-The gem downloads model files from Hugging Face Hub. For this to work, the model repository **must** contain ONNX files (e.g. `onnx/model.onnx`).
+The gem downloads model files from Hugging Face Hub. For this to work, the model repository **must** contain ONNX files (e.g. `model.onnx`).
+
+The default model is [`protectai/deberta-v3-base-injection-onnx`](https://huggingface.co/protectai/deberta-v3-base-injection-onnx), which is a pre-converted ONNX version of the original `deepset/deberta-v3-base-injection` model.
 
 ### Check if your model has ONNX files
 
-Visit the model page on Hugging Face and look for an `onnx/` directory in the file tree. For example:
-`https://huggingface.co/deepset/deberta-v3-base-injection/tree/main`
+Visit the model page on Hugging Face and look for a `model.onnx` file in the file tree. For example:
+`https://huggingface.co/protectai/deberta-v3-base-injection-onnx/tree/main`
 
-If the repository contains `onnx/model.onnx`, you're good to go. If not, you need to export it first.
+If the repository contains `model.onnx`, you're good to go. If not, you need to export it first.
 
 ### Export a model to ONNX
 
@@ -38,7 +40,7 @@ If your chosen model does not have ONNX files on Hugging Face, export it locally
 ```bash
 pip install optimum[onnxruntime] transformers torch
 optimum-cli export onnx \
-  --model deepset/deberta-v3-base-injection \
+  --model protectai/deberta-v3-base-injection-onnx \
   --task text-classification ./prompt-guard-model
 ```
 
@@ -69,7 +71,8 @@ Any Hugging Face text-classification model with 2 labels and ONNX files can be u
 
 | Model | ONNX available? | Notes |
 |-------|:-:|-------|
-| `deepset/deberta-v3-base-injection` | Check HF | Default model, good F1 score |
+| `protectai/deberta-v3-base-injection-onnx` | Yes | Default model, pre-converted ONNX, good F1 score |
+| `deepset/deberta-v3-base-injection` | No (PyTorch only) | Original model, needs ONNX export |
 | `protectai/deberta-v3-base-prompt-injection-v2` | Check HF | Good alternative |
 
 > Models in the [`Xenova/`](https://huggingface.co/Xenova) namespace on Hugging Face are typically pre-converted to ONNX and work out of the box.
@@ -134,13 +137,13 @@ end
 
 ```ruby
 PromptGuard.configure(
-  model_id: "deepset/deberta-v3-base-injection",  # Hugging Face model ID
-  threshold: 0.7,                                   # Confidence threshold (default: 0.5)
-  dtype: "q8",                                      # Model variant (fp32, q8, fp16)
-  revision: "main",                                 # HF model revision
-  local_path: nil,                                  # Path to a local ONNX model directory
-  onnx_prefix: nil,                                 # Override ONNX subdirectory (default: "onnx")
-  model_file_name: nil                              # Override ONNX filename stem (default: based on dtype)
+  model_id: "protectai/deberta-v3-base-injection-onnx",  # Hugging Face model ID
+  threshold: 0.7,                                        # Confidence threshold (default: 0.5)
+  dtype: "q8",                                           # Model variant (fp32, q8, fp16)
+  revision: "main",                                      # HF model revision
+  local_path: nil,                                       # Path to a local ONNX model directory
+  onnx_prefix: nil,                                      # Override ONNX subdirectory (default: nil = root)
+  model_file_name: nil                                   # Override ONNX filename stem (default: based on dtype)
 )
 ```
 
@@ -237,7 +240,7 @@ end
 
 ```ruby
 detector = PromptGuard::Detector.new(
-  model_id: "deepset/deberta-v3-base-injection",
+  model_id: "protectai/deberta-v3-base-injection-onnx",
   threshold: 0.5,
   dtype: "q8",
   local_path: "/path/to/model"
@@ -316,13 +319,12 @@ Cache structure:
 
 ```
 ~/.cache/prompt_guard/
-  deepset/deberta-v3-base-injection/
+  protectai/deberta-v3-base-injection-onnx/
+    model.onnx
     tokenizer.json
     config.json
     special_tokens_map.json
     tokenizer_config.json
-    onnx/
-      model.onnx
 ```
 
 ## Environment Variables

@@ -17,7 +17,7 @@ via ONNX Runtime.
 | Gem name | `prompt_guard` (snake_case) | `prompt_guard` |
 | Module name | `PromptGuard` (PascalCase) | `PromptGuard` |
 | GitHub repo | `NathanHimpens/prompt-guard-ruby` | -- |
-| Default model | Hugging Face model ID | `deepset/deberta-v3-base-injection` |
+| Default model | Hugging Face model ID | `protectai/deberta-v3-base-injection-onnx` |
 
 ---
 
@@ -62,13 +62,12 @@ Models are referenced by their Hugging Face identifier: `"owner/model-name"`.
 
 ```
 ~/.cache/prompt_guard/
-  deepset/deberta-v3-base-injection/
-    tokenizer.json
-    config.json
-    special_tokens_map.json
-    tokenizer_config.json
-    onnx/
-      model.onnx
+ protectai/deberta-v3-base-injection-onnx/
+ model.onnx
+ tokenizer.json
+ config.json
+ special_tokens_map.json
+ tokenizer_config.json
 ```
 
 ### Download flow
@@ -129,7 +128,7 @@ PromptGuard.logger = Logger.new($stdout, level: Logger::INFO)
 # Configure the shared detector singleton.
 # All parameters are optional; only provided values override defaults.
 PromptGuard.configure(
-  model_id: "deepset/deberta-v3-base-injection",  # Hugging Face model ID
+  model_id: "protectai/deberta-v3-base-injection-onnx",  # Hugging Face model ID
   threshold: 0.5,                                   # Confidence threshold
   cache_dir: nil,                                   # Cache directory override
   local_path: nil,                                  # Path to pre-exported ONNX model
@@ -171,7 +170,7 @@ PromptGuard.ready? # => true / false
 
 ```ruby
 detector = PromptGuard::Detector.new(
-  model_id: "deepset/deberta-v3-base-injection",
+ model_id: "protectai/deberta-v3-base-injection-onnx",
   threshold: 0.5,
   dtype: "q8",
   local_path: "/path/to/model"
@@ -242,10 +241,12 @@ The `Model` class handles:
 
 | dtype | ONNX file | Path |
 |-------|-----------|------|
-| `fp32` | `model.onnx` | `onnx/model.onnx` |
-| `fp16` | `model_fp16.onnx` | `onnx/model_fp16.onnx` |
-| `q8` | `model_quantized.onnx` | `onnx/model_quantized.onnx` |
-| `q4` | `model_q4.onnx` | `onnx/model_q4.onnx` |
+| `fp32` | `model.onnx` | `model.onnx` |
+| `fp16` | `model_fp16.onnx` | `model_fp16.onnx` |
+| `q8` | `model_quantized.onnx` | `model_quantized.onnx` |
+| `q4` | `model_q4.onnx` | `model_q4.onnx` |
+
+When `onnx_prefix` is set (e.g. `"onnx"`), paths are prefixed: `onnx/model.onnx`.
 
 Cache directory resolution order:
 1. `cache_dir:` parameter (if provided)

@@ -24,7 +24,7 @@ server (or in the repo under a gitignored path). Run this once:
 ```bash
 pip install optimum[onnxruntime] transformers torch
 optimum-cli export onnx \
-  --model deepset/deberta-v3-base-injection \
+  --model protectai/deberta-v3-base-injection-onnx \
   --task text-classification ./prompt-guard-model
 ```
 
