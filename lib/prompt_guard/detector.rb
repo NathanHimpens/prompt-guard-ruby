@@ -15,7 +15,7 @@ module PromptGuard
 
     # Initialize the detector.
     #
-    # @param model_id [String] Hugging Face model ID (default: deepset/deberta-v3-base-injection)
+    # @param model_id [String] Hugging Face model ID (default: protectai/deberta-v3-base-injection-onnx)
     # @param threshold [Float] Confidence threshold for detection (default: 0.5)
     # @param cache_dir [String, nil] Cache directory for downloaded models
     # @param local_path [String, nil] Path to a pre-exported ONNX model directory
@@ -23,7 +23,7 @@ module PromptGuard
     # @param revision [String] Model revision/branch on HF Hub (default: "main")
     # @param model_file_name [String, nil] Override the ONNX filename
     # @param onnx_prefix [String, nil] Override the ONNX subdirectory
-    def initialize(model_id: "deepset/deberta-v3-base-injection", threshold: 0.5,
+    def initialize(model_id: "protectai/deberta-v3-base-injection-onnx", threshold: 0.5,
                    cache_dir: nil, local_path: nil, dtype: "fp32", revision: "main",
                    model_file_name: nil, onnx_prefix: nil)
       @model_id = model_id

@@ -20,7 +20,9 @@ module PromptGuard
     }.freeze
 
     # Subdirectory within the HF repo that contains the ONNX file.
-    DEFAULT_ONNX_PREFIX = "onnx"
+    # nil means root level (e.g. protectai/deberta-v3-base-injection-onnx).
+    # Set to "onnx" for repos that store ONNX files in an onnx/ subdirectory.
+    DEFAULT_ONNX_PREFIX = nil
 
     # Files downloaded alongside the model for tokenization and config.
     TOKENIZER_FILES = %w[
@@ -32,7 +34,7 @@ module PromptGuard
 
     attr_reader :model_id, :local_path
 
-    # @param model_id [String] Hugging Face model ID (e.g. "deepset/deberta-v3-base-injection")
+    # @param model_id [String] Hugging Face model ID (e.g. "protectai/deberta-v3-base-injection-onnx")
     # @param local_path [String, nil] Path to a local directory with pre-exported model files
     # @param cache_dir [String, nil] Override default cache directory
     # @param dtype [String] Model variant: "fp32" (default), "q8", "fp16", etc.
@@ -111,11 +113,15 @@ module PromptGuard
     private
 
     # Build the ONNX filename based on dtype and prefix.
-    # e.g. "onnx/model.onnx", "onnx/model_quantized.onnx"
+    # e.g. "model.onnx", "onnx/model.onnx", "onnx/model_quantized.onnx"
     def onnx_filename
       prefix = @onnx_prefix || DEFAULT_ONNX_PREFIX
       stem = @model_file_name || ONNX_FILE_MAP.fetch(@dtype, "model")
-      "#{prefix}/#{stem}.onnx"
+      if prefix
+        "#{prefix}/#{stem}.onnx"
+      else
+        "#{stem}.onnx"
+      end
     end
 
     # Options forwarded to Hub.get_model_file.

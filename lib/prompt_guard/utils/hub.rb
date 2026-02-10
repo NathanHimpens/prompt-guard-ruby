@@ -19,7 +19,7 @@ module PromptGuard
       class << self
         # Download a model file from Hugging Face Hub (or return cached path).
         #
-        # @param model_id [String] Hugging Face model ID (e.g. "deepset/deberta-v3-base-injection")
+        # @param model_id [String] Hugging Face model ID (e.g. "protectai/deberta-v3-base-injection-onnx")
         # @param filename [String] File path within the model repo (e.g. "onnx/model.onnx")
         # @param fatal [Boolean] Raise on error (true) or return nil (false)
         # @param cache_dir [String, nil] Override cache directory
