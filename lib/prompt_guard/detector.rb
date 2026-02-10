@@ -4,30 +4,47 @@ require "onnxruntime"
 require "tokenizers"
 
 module PromptGuard
-  # Détecteur d'injection de prompts
+  # Prompt injection detector using ONNX inference.
+  #
+  # On first use the detector lazily downloads model files from Hugging Face Hub
+  # (unless a local_path is provided) and loads them into memory.
   class Detector
     LABELS = { 0 => "LEGIT", 1 => "INJECTION" }.freeze
 
-    attr_reader :model_id, :threshold
+    attr_reader :model_id, :threshold, :model_manager
 
-    # Initialise le détecteur
+    # Initialize the detector.
     #
-    # @param model_id [String] ID du modèle Hugging Face (default: deepset/deberta-v3-base-injection)
-    # @param threshold [Float] Seuil de confiance pour la détection (default: 0.5)
-    # @param cache_dir [String, nil] Répertoire de cache pour les modèles
-    # @param local_path [String, nil] Chemin vers un modèle ONNX pré-exporté
-    def initialize(model_id: "deepset/deberta-v3-base-injection", threshold: 0.5, cache_dir: nil, local_path: nil)
+    # @param model_id [String] Hugging Face model ID (default: deepset/deberta-v3-base-injection)
+    # @param threshold [Float] Confidence threshold for detection (default: 0.5)
+    # @param cache_dir [String, nil] Cache directory for downloaded models
+    # @param local_path [String, nil] Path to a pre-exported ONNX model directory
+    # @param dtype [String] Model variant: "fp32" (default), "q8", "fp16", etc.
+    # @param revision [String] Model revision/branch on HF Hub (default: "main")
+    # @param model_file_name [String, nil] Override the ONNX filename
+    # @param onnx_prefix [String, nil] Override the ONNX subdirectory
+    def initialize(model_id: "deepset/deberta-v3-base-injection", threshold: 0.5,
+                   cache_dir: nil, local_path: nil, dtype: "fp32", revision: "main",
+                   model_file_name: nil, onnx_prefix: nil)
       @model_id = model_id
       @threshold = threshold
-      @local_path = local_path
-      @model_manager = Model.new(model_id, cache_dir: cache_dir, local_path: local_path)
+      @model_manager = Model.new(
+        model_id,
+        local_path: local_path,
+        cache_dir: cache_dir,
+        dtype: dtype,
+        revision: revision,
+        model_file_name: model_file_name,
+        onnx_prefix: onnx_prefix
+      )
       @loaded = false
     end
 
-    # Détecte si un prompt est une injection
+    # Detect whether a prompt is an injection attempt.
     #
-    # @param text [String] Le texte à analyser
-    # @return [Hash] Résultat avec :is_injection, :label, :score, :inference_time_ms
+    # @param text [String] The text to analyze
+    # @return [Hash] Result with :text, :is_injection, :label, :score, :inference_time_ms
+    # @raise [InferenceError] if the model fails during inference
     def detect(text)
       ensure_loaded!
 
@@ -36,7 +53,7 @@ module PromptGuard
       # Tokenization
       encoding = @tokenizer.encode(text)
 
-      # Inférence
+      # Inference
       inputs = {
         "input_ids" => [encoding.ids],
         "attention_mask" => [encoding.attention_mask]
@@ -44,7 +61,7 @@ module PromptGuard
       outputs = @session.predict(inputs)
       logits = outputs["logits"][0]
 
-      # Calcul des probabilités
+      # Compute probabilities
       probs = softmax(logits)
       predicted_class = probs.each_with_index.max_by { |prob, _| prob }[1]
       confidence = probs[predicted_class]
@@ -58,54 +75,64 @@ module PromptGuard
         score: confidence,
         inference_time_ms: (inference_time * 1000).round(2)
       }
+    rescue PromptGuard::Error
+      raise
+    rescue StandardError => e
+      raise InferenceError, "Inference failed: #{e.message}"
     end
 
-    # Vérifie si un texte est une injection (version simple)
+    # Check whether a text is an injection attempt (simple boolean).
     #
-    # @param text [String] Le texte à analyser
-    # @return [Boolean] true si injection détectée
+    # @param text [String] The text to analyze
+    # @return [Boolean] true if injection detected
     def injection?(text)
       detect(text)[:is_injection]
     end
 
-    # Vérifie si un texte est safe
+    # Check whether a text is safe (not an injection).
     #
-    # @param text [String] Le texte à analyser
-    # @return [Boolean] true si le texte est safe
+    # @param text [String] The text to analyze
+    # @return [Boolean] true if the text is safe
     def safe?(text)
       !injection?(text)
     end
 
-    # Analyse plusieurs textes
+    # Analyze multiple texts.
     #
-    # @param texts [Array<String>] Les textes à analyser
-    # @return [Array<Hash>] Résultats pour chaque texte
+    # @param texts [Array<String>] The texts to analyze
+    # @return [Array<Hash>] Results for each text
     def detect_batch(texts)
       texts.map { |text| detect(text) }
     end
 
-    # Charge le modèle (appelé automatiquement au premier usage)
+    # Load the model into memory. Downloads files if needed (via Hub).
+    # Called automatically on first detection.
+    #
+    # @return [void]
+    # @raise [ModelNotFoundError] if model files are missing or cannot be downloaded
     def load!
       return if @loaded
 
-      model_path = @model_manager.model_path
+      tokenizer_file = @model_manager.tokenizer_path
+      onnx_file = @model_manager.onnx_path
 
-      tokenizer_path = File.join(model_path, "tokenizer.json")
-      onnx_path = File.join(model_path, "model.onnx")
-
-      @tokenizer = Tokenizers::Tokenizer.from_file(tokenizer_path)
-      @session = OnnxRuntime::Model.new(onnx_path)
+      @tokenizer = Tokenizers::Tokenizer.from_file(tokenizer_file)
+      @session = OnnxRuntime::Model.new(onnx_file)
       @loaded = true
     end
 
-    # Décharge le modèle de la mémoire
+    # Unload the model from memory.
+    #
+    # @return [void]
     def unload!
       @tokenizer = nil
       @session = nil
       @loaded = false
     end
 
-    # Vérifie si le modèle est chargé
+    # Check whether the model is loaded into memory.
+    #
+    # @return [Boolean]
     def loaded?
       @loaded
     end

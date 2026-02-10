@@ -1,173 +1,140 @@
 # frozen_string_literal: true
 
-require "digest"
-require "fileutils"
-require "net/http"
-require "uri"
-require "json"
-
 module PromptGuard
-  # Gère le téléchargement et le cache des modèles depuis Hugging Face
+  # Manages model file resolution and downloading from Hugging Face Hub.
+  #
+  # Follows the ankane/informers pattern:
+  # - Lazily downloads all files (ONNX + tokenizer) from HF Hub on first use
+  # - Caches locally following XDG standard
+  # - Supports dtype variants (fp32, q8, fp16, etc.)
+  # - Supports local_path for pre-downloaded / manually exported models
   class Model
-    HF_BASE_URL = "https://huggingface.co"
-    
-    # Fichiers nécessaires pour le tokenizer (le modèle ONNX doit être exporté séparément)
-    TOKENIZER_FILES = {
-      "tokenizer.json" => "tokenizer.json",
-      "config.json" => "config.json",
-      "special_tokens_map.json" => "special_tokens_map.json",
-      "tokenizer_config.json" => "tokenizer_config.json"
+    # Map dtype shorthand to ONNX file name suffix.
+    ONNX_FILE_MAP = {
+      "fp32" => "model",
+      "fp16" => "model_fp16",
+      "q8"   => "model_quantized",
+      "int8" => "model_quantized",
+      "q4"   => "model_q4",
+      "q4f16" => "model_q4f16"
     }.freeze
 
-    attr_reader :model_id, :cache_dir, :local_path
+    # Subdirectory within the HF repo that contains the ONNX file.
+    DEFAULT_ONNX_PREFIX = "onnx"
 
-    # @param model_id [String] ID Hugging Face ou chemin local
-    # @param cache_dir [String, nil] Répertoire de cache
-    # @param local_path [String, nil] Chemin vers un modèle ONNX pré-exporté
-    def initialize(model_id, cache_dir: nil, local_path: nil)
+    # Files downloaded alongside the model for tokenization and config.
+    TOKENIZER_FILES = %w[
+      tokenizer.json
+      config.json
+      special_tokens_map.json
+      tokenizer_config.json
+    ].freeze
+
+    attr_reader :model_id, :local_path
+
+    # @param model_id [String] Hugging Face model ID (e.g. "deepset/deberta-v3-base-injection")
+    # @param local_path [String, nil] Path to a local directory with pre-exported model files
+    # @param cache_dir [String, nil] Override default cache directory
+    # @param dtype [String] Model variant: "fp32" (default), "q8", "fp16", etc.
+    # @param revision [String] Model revision/branch on HF Hub (default: "main")
+    # @param model_file_name [String, nil] Override the ONNX filename (without .onnx extension)
+    # @param onnx_prefix [String, nil] Override the ONNX subdirectory (default: "onnx")
+    def initialize(model_id, local_path: nil, cache_dir: nil, dtype: "fp32",
+                   revision: "main", model_file_name: nil, onnx_prefix: nil)
       @model_id = model_id
-      @cache_dir = cache_dir || default_cache_dir
       @local_path = local_path
+      @cache_dir = cache_dir
+      @dtype = dtype
+      @revision = revision
+      @model_file_name = model_file_name
+      @onnx_prefix = onnx_prefix
     end
 
-    # Chemin local du modèle
-    def model_path
-      # Si un chemin local est fourni, l'utiliser directement
-      return @local_path if @local_path && File.exist?(File.join(@local_path, "model.onnx"))
-      
-      ensure_downloaded!
-      local_model_dir
+    # Path to the ONNX model file. Downloads from HF Hub if needed.
+    #
+    # @return [String] Absolute path to model.onnx
+    # @raise [ModelNotFoundError] if using local_path and file is missing
+    # @raise [DownloadError] if download from HF Hub fails
+    def onnx_path
+      if @local_path
+        local_file!("model.onnx")
+      else
+        Utils::Hub.get_model_file(@model_id, onnx_filename, true, **hub_options)
+      end
     end
 
-    # Vérifie si le modèle est prêt (ONNX + tokenizer)
+    # Path to the tokenizer.json file. Downloads from HF Hub if needed.
+    #
+    # @return [String] Absolute path to tokenizer.json
+    # @raise [ModelNotFoundError] if using local_path and file is missing
+    # @raise [DownloadError] if download from HF Hub fails
+    def tokenizer_path
+      if @local_path
+        local_file!("tokenizer.json")
+      else
+        Utils::Hub.get_model_file(@model_id, "tokenizer.json", true, **hub_options)
+      end
+    end
+
+    # Whether the required model files are available locally (no download needed).
+    #
+    # @return [Boolean]
     def ready?
-      path = @local_path || local_model_dir
-      File.exist?(File.join(path, "model.onnx")) &&
-        File.exist?(File.join(path, "tokenizer.json"))
-    end
-
-    # Vérifie si les fichiers tokenizer sont téléchargés
-    def tokenizer_downloaded?
-      TOKENIZER_FILES.keys.all? { |file| File.exist?(File.join(local_model_dir, file)) }
-    end
-
-    # Télécharge les fichiers tokenizer
-    def ensure_downloaded!
-      return if ready?
-      
-      unless tokenizer_downloaded?
-        puts "Downloading tokenizer for #{model_id}..."
-        download_tokenizer!
-      end
-
-      unless File.exist?(File.join(local_model_dir, "model.onnx"))
-        raise Error, <<~MSG
-          ONNX model not found for #{model_id}.
-          
-          This model needs to be exported to ONNX format first.
-          
-          Options:
-          1. Use a pre-exported model by setting local_path:
-             PromptGuard.configure(local_path: "/path/to/exported/model")
-          
-          2. Export the model yourself:
-             pip install optimum[onnxruntime] transformers torch
-             optimum-cli export onnx --model #{model_id} --task text-classification #{local_model_dir}
-          
-          3. Run the export script:
-             python -c "
-             import torch
-             from transformers import AutoModelForSequenceClassification, AutoTokenizer
-             model = AutoModelForSequenceClassification.from_pretrained('#{model_id}')
-             tokenizer = AutoTokenizer.from_pretrained('#{model_id}')
-             model.eval()
-             dummy = tokenizer('test', return_tensors='pt')
-             torch.onnx.export(model, (dummy['input_ids'], dummy['attention_mask']),
-                              '#{local_model_dir}/model.onnx',
-                              input_names=['input_ids', 'attention_mask'],
-                              output_names=['logits'],
-                              dynamic_axes={'input_ids': {0: 'batch', 1: 'seq'},
-                                           'attention_mask': {0: 'batch', 1: 'seq'},
-                                           'logits': {0: 'batch'}},
-                              opset_version=17)
-             "
-        MSG
+      if @local_path
+        File.exist?(File.join(@local_path, "model.onnx")) &&
+          File.exist?(File.join(@local_path, "tokenizer.json"))
+      else
+        dir = @cache_dir || PromptGuard.cache_dir
+        File.exist?(File.join(dir, @model_id, onnx_filename)) &&
+          File.exist?(File.join(dir, @model_id, "tokenizer.json"))
       end
     end
 
-    # Force le re-téléchargement du tokenizer
-    def download!
-      TOKENIZER_FILES.keys.each do |file|
-        path = File.join(local_model_dir, file)
-        FileUtils.rm_f(path)
+    # Pre-download all model files (ONNX + tokenizer + config).
+    # Useful to call at application startup so first inference is fast.
+    #
+    # @return [void]
+    def preload!
+      if @local_path
+        local_file!("model.onnx")
+        local_file!("tokenizer.json")
+      else
+        # Download tokenizer/config files (non-fatal -- some may not exist)
+        TOKENIZER_FILES.each do |file|
+          Utils::Hub.get_model_file(@model_id, file, false, **hub_options)
+        end
+        # Download ONNX model (fatal)
+        onnx_path
       end
-      download_tokenizer!
     end
 
     private
 
-    def default_cache_dir
-      if ENV["PROMPT_GUARD_CACHE_DIR"]
-        ENV["PROMPT_GUARD_CACHE_DIR"]
-      elsif ENV["XDG_CACHE_HOME"]
-        File.join(ENV["XDG_CACHE_HOME"], "prompt_guard")
-      else
-        File.join(Dir.home, ".cache", "prompt_guard")
-      end
+    # Build the ONNX filename based on dtype and prefix.
+    # e.g. "onnx/model.onnx", "onnx/model_quantized.onnx"
+    def onnx_filename
+      prefix = @onnx_prefix || DEFAULT_ONNX_PREFIX
+      stem = @model_file_name || ONNX_FILE_MAP.fetch(@dtype, "model")
+      "#{prefix}/#{stem}.onnx"
     end
 
-    def local_model_dir
-      @local_model_dir ||= File.join(cache_dir, "models", model_id.gsub("/", "--"))
+    # Options forwarded to Hub.get_model_file.
+    def hub_options
+      opts = {}
+      opts[:cache_dir] = @cache_dir if @cache_dir
+      opts[:revision] = @revision
+      opts
     end
 
-    def download_tokenizer!
-      FileUtils.mkdir_p(local_model_dir)
-
-      TOKENIZER_FILES.each do |local_name, remote_path|
-        download_file(remote_path, File.join(local_model_dir, local_name))
+    # Resolve a file within the local_path directory.
+    #
+    # @raise [ModelNotFoundError] if the file does not exist
+    def local_file!(filename)
+      path = File.join(@local_path, filename)
+      unless File.exist?(path)
+        raise ModelNotFoundError, "#{filename} not found at #{path}"
       end
-      
-      puts "Tokenizer downloaded to #{local_model_dir}"
-    end
-
-    def download_file(remote_path, local_path)
-      return if File.exist?(local_path)
-      
-      url = "#{HF_BASE_URL}/#{model_id}/resolve/main/#{remote_path}"
-      
-      puts "  Downloading #{remote_path}..."
-      
-      uri = URI.parse(url)
-      response = fetch_with_redirects(uri)
-
-      case response
-      when Net::HTTPSuccess
-        File.binwrite(local_path, response.body)
-      else
-        raise Error, "Failed to download #{url}: #{response.code} #{response.message}"
-      end
-    end
-
-    def fetch_with_redirects(uri, limit = 5)
-      raise Error, "Too many redirects" if limit == 0
-
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = (uri.scheme == "https")
-      http.read_timeout = 300  # 5 minutes pour les gros fichiers
-      http.open_timeout = 30
-
-      request = Net::HTTP::Get.new(uri)
-      response = http.request(request)
-
-      case response
-      when Net::HTTPRedirection
-        new_uri = URI.parse(response["location"])
-        # Handle relative redirects
-        new_uri = URI.join(uri, new_uri) unless new_uri.host
-        fetch_with_redirects(new_uri, limit - 1)
-      else
-        response
-      end
+      path
     end
   end
 end
