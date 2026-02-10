@@ -117,7 +117,7 @@ class PromptGuardTest < Minitest::Test
 
   def test_configure_with_dtype
     PromptGuard.configure(dtype: "q8")
-    assert_equal "onnx/model_quantized.onnx", PromptGuard.detector.model_manager.send(:onnx_filename)
+    assert_equal "model_quantized.onnx", PromptGuard.detector.model_manager.send(:onnx_filename)
   end
 
   # --- Delegation ---

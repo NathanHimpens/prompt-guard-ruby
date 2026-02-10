@@ -8,8 +8,8 @@ class ModelTest < Minitest::Test
   # --- Initialization ---
 
   def test_model_id_is_stored
-    model = PromptGuard::Model.new("deepset/deberta-v3-base-injection")
-    assert_equal "deepset/deberta-v3-base-injection", model.model_id
+    model = PromptGuard::Model.new("protectai/deberta-v3-base-injection-onnx")
+    assert_equal "protectai/deberta-v3-base-injection-onnx", model.model_id
   end
 
   def test_local_path_is_stored
@@ -100,11 +100,10 @@ class ModelTest < Minitest::Test
 
   def test_ready_returns_true_when_cached_files_exist
     Dir.mktmpdir do |dir|
-      # Create cached files in Hub layout
+      # Create cached files in Hub layout (ONNX at root level by default)
       model_dir = File.join(dir, "test/model")
-      onnx_dir = File.join(model_dir, "onnx")
-      FileUtils.mkdir_p(onnx_dir)
-      File.write(File.join(onnx_dir, "model.onnx"), "fake")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake")
       File.write(File.join(model_dir, "tokenizer.json"), "fake")
 
       model = PromptGuard::Model.new("test/model", cache_dir: dir)
@@ -143,12 +142,12 @@ class ModelTest < Minitest::Test
 
   def test_onnx_path_returns_cached_file_when_exists
     Dir.mktmpdir do |dir|
-      onnx_dir = File.join(dir, "test/model", "onnx")
-      FileUtils.mkdir_p(onnx_dir)
-      File.write(File.join(onnx_dir, "model.onnx"), "fake")
+      model_dir = File.join(dir, "test/model")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake")
 
       model = PromptGuard::Model.new("test/model", cache_dir: dir)
-      assert_equal File.join(onnx_dir, "model.onnx"), model.onnx_path
+      assert_equal File.join(model_dir, "model.onnx"), model.onnx_path
     end
   end
 
@@ -178,23 +177,27 @@ class ModelTest < Minitest::Test
 
   def test_default_onnx_filename
     model = PromptGuard::Model.new("test/model")
-    assert model.send(:onnx_filename).end_with?("model.onnx")
-    assert model.send(:onnx_filename).start_with?("onnx/")
+    assert_equal "model.onnx", model.send(:onnx_filename)
   end
 
   def test_quantized_onnx_filename
     model = PromptGuard::Model.new("test/model", dtype: "q8")
-    assert_equal "onnx/model_quantized.onnx", model.send(:onnx_filename)
+    assert_equal "model_quantized.onnx", model.send(:onnx_filename)
   end
 
   def test_fp16_onnx_filename
     model = PromptGuard::Model.new("test/model", dtype: "fp16")
-    assert_equal "onnx/model_fp16.onnx", model.send(:onnx_filename)
+    assert_equal "model_fp16.onnx", model.send(:onnx_filename)
   end
 
   def test_custom_model_file_name
     model = PromptGuard::Model.new("test/model", model_file_name: "custom_model")
-    assert_equal "onnx/custom_model.onnx", model.send(:onnx_filename)
+    assert_equal "custom_model.onnx", model.send(:onnx_filename)
+  end
+
+  def test_onnx_filename_with_prefix
+    model = PromptGuard::Model.new("test/model", onnx_prefix: "onnx")
+    assert_equal "onnx/model.onnx", model.send(:onnx_filename)
   end
 
   def test_custom_onnx_prefix

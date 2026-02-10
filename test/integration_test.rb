@@ -134,9 +134,8 @@ class IntegrationTest < Minitest::Test
     Dir.mktmpdir do |dir|
       # Pre-populate cache to simulate a previously downloaded model
       model_dir = File.join(dir, "test/model")
-      onnx_dir = File.join(model_dir, "onnx")
-      FileUtils.mkdir_p(onnx_dir)
-      File.write(File.join(onnx_dir, "model.onnx"), "fake_onnx")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake_onnx")
       File.write(File.join(model_dir, "tokenizer.json"), "fake_tokenizer")
 
       PromptGuard.configure(model_id: "test/model", cache_dir: dir)

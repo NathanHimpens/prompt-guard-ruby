@@ -7,7 +7,7 @@ class DetectorTest < Minitest::Test
 
   def test_default_model_id
     detector = PromptGuard::Detector.new
-    assert_equal "deepset/deberta-v3-base-injection", detector.model_id
+    assert_equal "protectai/deberta-v3-base-injection-onnx", detector.model_id
   end
 
   def test_default_threshold
@@ -167,6 +167,6 @@ class DetectorTest < Minitest::Test
   def test_dtype_is_passed_to_model_manager
     detector = PromptGuard::Detector.new(dtype: "q8")
     # Verify through the model manager's onnx_filename
-    assert_equal "onnx/model_quantized.onnx", detector.model_manager.send(:onnx_filename)
+    assert_equal "model_quantized.onnx", detector.model_manager.send(:onnx_filename)
   end
 end
