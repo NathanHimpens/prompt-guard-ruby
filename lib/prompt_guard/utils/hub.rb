@@ -116,6 +116,8 @@ module PromptGuard
               return stream_download(new_uri.to_s, dest_path, redirect_limit - 1)
             when Net::HTTPSuccess
               write_streamed_response(response, dest_path)
+            when Net::HTTPUnauthorized, Net::HTTPForbidden
+              raise DownloadError, auth_error_message(response, url)
             else
               raise DownloadError, "HTTP #{response.code} #{response.message} for #{url}"
             end
@@ -145,6 +147,19 @@ module PromptGuard
               end
             end
           end
+        end
+
+        def auth_error_message(response, url)
+          msg = "HTTP #{response.code} #{response.message} for #{url}."
+          if ENV["HF_TOKEN"]
+            msg += " Your HF_TOKEN may be invalid or you may need to accept the model's terms " \
+                   "at the Hugging Face model page."
+          else
+            msg += " This model may be gated and require authentication. " \
+                   "Set the HF_TOKEN environment variable with a Hugging Face access token " \
+                   "and ensure you have accepted the model's terms at the Hugging Face model page."
+          end
+          msg
         end
 
         def format_bytes(bytes)

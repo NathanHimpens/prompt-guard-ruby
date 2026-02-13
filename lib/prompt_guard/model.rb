@@ -53,6 +53,8 @@ module PromptGuard
     end
 
     # Path to the ONNX model file. Downloads from HF Hub if needed.
+    # Also downloads the companion `_data` file if present (used by large
+    # models that store external data separately).
     #
     # @return [String] Absolute path to model.onnx
     # @raise [ModelNotFoundError] if using local_path and file is missing
@@ -61,7 +63,13 @@ module PromptGuard
       if @local_path
         local_file!("model.onnx")
       else
-        Utils::Hub.get_model_file(@model_id, onnx_filename, true, **hub_options)
+        path = Utils::Hub.get_model_file(@model_id, onnx_filename, true, **hub_options)
+        # Also download companion external data file (e.g. model.onnx_data) if present.
+        # Large ONNX models split weights into a separate _data file that ONNX Runtime
+        # loads automatically from the same directory.
+        data_filename = "#{onnx_filename}_data"
+        Utils::Hub.get_model_file(@model_id, data_filename, false, **hub_options)
+        path
       end
     end
 

@@ -106,6 +106,42 @@ class HubTest < Minitest::Test
     end
   end
 
+  def test_auth_error_message_without_hf_token
+    original = ENV["HF_TOKEN"]
+    ENV.delete("HF_TOKEN")
+
+    response = Net::HTTPUnauthorized.new("1.1", "401", "Unauthorized")
+    msg = PromptGuard::Utils::Hub.send(:auth_error_message, response, "https://example.com/file")
+
+    assert_includes msg, "401"
+    assert_includes msg, "gated"
+    assert_includes msg, "HF_TOKEN"
+  ensure
+    if original
+      ENV["HF_TOKEN"] = original
+    else
+      ENV.delete("HF_TOKEN")
+    end
+  end
+
+  def test_auth_error_message_with_hf_token
+    original = ENV["HF_TOKEN"]
+    ENV["HF_TOKEN"] = "test_token"
+
+    response = Net::HTTPForbidden.new("1.1", "403", "Forbidden")
+    msg = PromptGuard::Utils::Hub.send(:auth_error_message, response, "https://example.com/file")
+
+    assert_includes msg, "403"
+    assert_includes msg, "invalid"
+    assert_includes msg, "accept the model's terms"
+  ensure
+    if original
+      ENV["HF_TOKEN"] = original
+    else
+      ENV.delete("HF_TOKEN")
+    end
+  end
+
   def test_atomic_write_cleans_up_incomplete_on_failure
     Dir.mktmpdir do |dir|
       PromptGuard.allow_remote_models = true

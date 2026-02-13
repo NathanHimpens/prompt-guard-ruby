@@ -151,6 +151,43 @@ class ModelTest < Minitest::Test
     end
   end
 
+  def test_onnx_path_returns_cached_file_with_data_companion
+    Dir.mktmpdir do |dir|
+      model_dir = File.join(dir, "test/model")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake")
+      File.write(File.join(model_dir, "model.onnx_data"), "fake_data")
+
+      model = PromptGuard::Model.new("test/model", cache_dir: dir)
+      assert_equal File.join(model_dir, "model.onnx"), model.onnx_path
+    end
+  end
+
+  def test_onnx_path_succeeds_without_data_companion
+    Dir.mktmpdir do |dir|
+      model_dir = File.join(dir, "test/model")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake")
+      # No model.onnx_data — should still work (companion is optional)
+
+      PromptGuard.allow_remote_models = false
+      model = PromptGuard::Model.new("test/model", cache_dir: dir)
+      assert_equal File.join(model_dir, "model.onnx"), model.onnx_path
+    end
+  end
+
+  def test_onnx_path_with_prefix_downloads_data_companion
+    Dir.mktmpdir do |dir|
+      model_dir = File.join(dir, "test/model", "onnx")
+      FileUtils.mkdir_p(model_dir)
+      File.write(File.join(model_dir, "model.onnx"), "fake")
+      File.write(File.join(model_dir, "model.onnx_data"), "fake_data")
+
+      model = PromptGuard::Model.new("test/model", cache_dir: dir, onnx_prefix: "onnx")
+      assert_equal File.join(model_dir, "model.onnx"), model.onnx_path
+    end
+  end
+
   # --- tokenizer_path ---
 
   def test_tokenizer_path_returns_local_path_when_exists
