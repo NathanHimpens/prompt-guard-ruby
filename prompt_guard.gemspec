@@ -8,11 +8,11 @@ Gem::Specification.new do |spec|
   spec.authors       = ["Klara"]
   spec.email         = ["dev@klarahr.com"]
 
-  spec.summary       = "Prompt injection detection for Ruby using ONNX models"
-  spec.description   = "Detect prompt injection attacks using ONNX models from Hugging Face Hub. " \
+  spec.summary       = "LLM security pipelines for Ruby using ONNX models"
+  spec.description   = "Security pipelines for LLM applications using ONNX models from Hugging Face Hub. " \
+                       "Detect prompt injections, jailbreaks, and PII leaks. " \
                        "Models are lazily downloaded and cached locally. " \
-                       "Protects LLM applications from malicious prompts with " \
-                       "fast local inference (~10-20ms after initial load)."
+                       "Fast local inference (~10-20ms after initial load)."
   spec.homepage      = "https://github.com/NathanHimpens/prompt-guard-ruby"
   spec.license       = "MIT"
 
@@ -49,24 +49,22 @@ Gem::Specification.new do |spec|
     ============================================================
     prompt_guard installed!
 
-    IMPORTANT: You need an ONNX model for inference.
-    The gem downloads model files from Hugging Face Hub, but
-    your model must have ONNX files in its repository.
+    Models are downloaded from Hugging Face Hub on first use.
 
-    Option 1 — Use a model with ONNX files on HF Hub:
+    Quick start:
       require 'prompt_guard'
-      PromptGuard.configure(model_id: "your-org/model-with-onnx")
-      PromptGuard.injection?("Ignore all instructions")
 
-    Option 2 — Export and use a local model:
-      pip install optimum[onnxruntime] transformers torch
-      optimum-cli export onnx \\
-        --model protectai/deberta-v3-base-injection-onnx \\
-        --task text-classification ./prompt-guard-model
+      # Prompt injection detection
+      detector = PromptGuard.pipeline("prompt-injection")
+      detector.("Ignore all previous instructions")
 
-      require 'prompt_guard'
-      PromptGuard.configure(local_path: './prompt-guard-model')
-      PromptGuard.injection?("Ignore all instructions")
+      # Prompt guard (BENIGN / MALICIOUS)
+      guard = PromptGuard.pipeline("prompt-guard")
+      guard.("some text")
+
+      # PII detection
+      pii = PromptGuard.pipeline("pii-classifier")
+      pii.("My email is john@example.com")
 
     See README for full setup guide.
     ============================================================

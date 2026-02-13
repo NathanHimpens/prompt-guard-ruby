@@ -9,7 +9,6 @@ require_relative "../lib/prompt_guard"
 
 module PromptGuardTestHelper
   def setup
-    @original_detector = PromptGuard.instance_variable_get(:@detector)
     @original_logger = PromptGuard.instance_variable_get(:@logger)
     @original_cache_dir = PromptGuard.instance_variable_get(:@cache_dir)
     @original_remote_host = PromptGuard.instance_variable_get(:@remote_host)
@@ -18,7 +17,6 @@ module PromptGuardTestHelper
   end
 
   def teardown
-    PromptGuard.instance_variable_set(:@detector, @original_detector)
     PromptGuard.instance_variable_set(:@logger, @original_logger)
     PromptGuard.instance_variable_set(:@cache_dir, @original_cache_dir)
     PromptGuard.instance_variable_set(:@remote_host, @original_remote_host)

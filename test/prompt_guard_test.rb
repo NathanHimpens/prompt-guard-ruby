@@ -93,105 +93,47 @@ class PromptGuardTest < Minitest::Test
     assert_equal custom_logger, PromptGuard.logger
   end
 
-  # --- Detector singleton ---
+  # --- Pipeline factory ---
 
-  def test_detector_returns_a_detector
-    assert_kind_of PromptGuard::Detector, PromptGuard.detector
+  def test_pipeline_returns_prompt_injection_pipeline
+    pipeline = PromptGuard.pipeline("prompt-injection")
+    assert_kind_of PromptGuard::PromptInjectionPipeline, pipeline
   end
 
-  def test_detector_is_memoized
-    assert_same PromptGuard.detector, PromptGuard.detector
+  def test_pipeline_returns_prompt_guard_pipeline
+    pipeline = PromptGuard.pipeline("prompt-guard")
+    assert_kind_of PromptGuard::PromptGuardPipeline, pipeline
   end
 
-  def test_configure_replaces_detector
-    old_detector = PromptGuard.detector
-    PromptGuard.configure(threshold: 0.8)
-    refute_same old_detector, PromptGuard.detector
-    assert_equal 0.8, PromptGuard.detector.threshold
+  def test_pipeline_returns_pii_classifier_pipeline
+    pipeline = PromptGuard.pipeline("pii-classifier")
+    assert_kind_of PromptGuard::PIIClassifierPipeline, pipeline
   end
 
-  def test_configure_with_model_id
-    PromptGuard.configure(model_id: "custom/model")
-    assert_equal "custom/model", PromptGuard.detector.model_id
+  def test_pipeline_raises_on_unknown_task
+    assert_raises(ArgumentError) do
+      PromptGuard.pipeline("unknown-task")
+    end
   end
 
-  def test_configure_with_dtype
-    PromptGuard.configure(dtype: "q8")
-    assert_equal "model_quantized.onnx", PromptGuard.detector.model_manager.send(:onnx_filename)
+  def test_pipeline_uses_default_model
+    pipeline = PromptGuard.pipeline("prompt-injection")
+    assert_equal "protectai/deberta-v3-base-injection-onnx", pipeline.model_id
   end
 
-  # --- Delegation ---
-
-  def test_detect_delegates_to_detector
-    mock_result = { is_injection: false, label: "LEGIT", score: 0.99 }
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:detect, mock_result, ["hello"])
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    result = PromptGuard.detect("hello")
-
-    assert_equal mock_result, result
-    mock_detector.verify
+  def test_pipeline_accepts_custom_model
+    pipeline = PromptGuard.pipeline("prompt-injection", "custom/model")
+    assert_equal "custom/model", pipeline.model_id
   end
 
-  def test_injection_delegates_to_detector
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:injection?, true, ["bad input"])
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    result = PromptGuard.injection?("bad input")
-
-    assert_equal true, result
-    mock_detector.verify
+  def test_pipeline_passes_options
+    pipeline = PromptGuard.pipeline("prompt-injection", threshold: 0.8, dtype: "q8")
+    assert_equal 0.8, pipeline.threshold
+    assert_equal "model_quantized.onnx", pipeline.model_manager.send(:onnx_filename)
   end
 
-  def test_safe_delegates_to_detector
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:safe?, true, ["good input"])
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    result = PromptGuard.safe?("good input")
-
-    assert_equal true, result
-    mock_detector.verify
-  end
-
-  def test_detect_batch_delegates_to_detector
-    texts = ["a", "b"]
-    mock_results = [{ label: "LEGIT" }, { label: "INJECTION" }]
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:detect_batch, mock_results, [texts])
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    result = PromptGuard.detect_batch(texts)
-
-    assert_equal mock_results, result
-    mock_detector.verify
-  end
-
-  def test_preload_delegates_to_detector
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:load!, nil)
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    PromptGuard.preload!
-
-    mock_detector.verify
-  end
-
-  # --- Introspection ---
-
-  def test_ready_returns_false_when_model_not_present
-    PromptGuard.configure(local_path: "/tmp/nonexistent_model_dir")
-    refute PromptGuard.ready?
-  end
-
-  def test_ready_returns_true_when_model_is_loaded
-    mock_detector = Minitest::Mock.new
-    mock_detector.expect(:loaded?, true)
-
-    PromptGuard.instance_variable_set(:@detector, mock_detector)
-    assert PromptGuard.ready?
-    mock_detector.verify
+  def test_pii_pipeline_gets_default_onnx_prefix
+    pipeline = PromptGuard.pipeline("pii-classifier")
+    assert_equal "onnx/model.onnx", pipeline.model_manager.send(:onnx_filename)
   end
 end
